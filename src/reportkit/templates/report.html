@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Daily rental report {{ day }}</title></head>
+<body style="margin:0;padding:24px;background:#f5f5f4;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1c1917">
+<div style="max-width:760px;margin:0 auto;background:#ffffff;border:1px solid #e7e5e4;border-radius:12px;padding:24px">
+  <h1 style="font-size:22px;margin:0 0 4px">Daily rental report</h1>
+  <p style="margin:0 0 20px;color:#57534e">{{ day.strftime('%A %d %B %Y') }}
+    {% if kpis.baseline %} &middot; compared with the average of the previous {{ kpis.baseline_days }} trading days{% endif %}</p>
+
+  {% set cards = [("Rentals", "rentals", "{:,}"), ("Revenue", "revenue", "${:,.2f}"),
+                  ("Active customers", "active_customers", "{:,}"), ("Returns", "returns", "{:,}"),
+                  ("Revenue per rental", "revenue_per_rental", "${:,.2f}")] %}
+  <table role="presentation" style="width:100%;border-collapse:separate;border-spacing:8px 0;margin:0 -8px 20px">
+    <tr>
+    {% for label, key, fmt in cards %}
+      {% set change = kpis.change_pct.get(key) %}
+      <td style="background:#fafaf9;border:1px solid #e7e5e4;border-radius:10px;padding:12px;vertical-align:top">
+        <div style="font-size:12px;color:#57534e">{{ label }}</div>
+        <div style="font-size:20px;font-weight:700">{{ fmt.format(kpis[key]) }}</div>
+        {% if change is not none %}
+        <div style="font-size:12px;color:{{ '#15803d' if change >= 0 else '#b91c1c' }}">
+          {{ '&#9650;' | safe if change >= 0 else '&#9660;' | safe }} {{ '%+.1f' | format(change) }}%</div>
+        {% endif %}
+      </td>
+    {% endfor %}
+    </tr>
+  </table>
+
+  <img src="data:image/png;base64,{{ chart }}" alt="Revenue per day for the last 30 days" style="width:100%;height:auto">
+
+  {% macro table(df, columns, money=()) %}
+  <table style="width:100%;border-collapse:collapse;font-size:14px;margin:8px 0 20px">
+    <tr>{% for c in columns %}<th style="text-align:left;border-bottom:2px solid #e7e5e4;padding:6px 4px">{{ c | replace('_', ' ') | capitalize }}</th>{% endfor %}</tr>
+    {% for row in df.to_dict('records') %}
+    <tr>{% for c in columns %}<td style="border-bottom:1px solid #f0efee;padding:6px 4px">{% if c in money %}${{ '{:,.2f}'.format(row[c]) }}{% elif c == 'share' %}{{ '{:.1%}'.format(row[c]) }}{% else %}{{ row[c] }}{% endif %}</td>{% endfor %}</tr>
+    {% else %}
+    <tr><td colspan="{{ columns | length }}" style="padding:6px 4px;color:#57534e">Nothing on this day.</td></tr>
+    {% endfor %}
+  </table>
+  {% endmacro %}
+
+  <h2 style="font-size:17px;margin:20px 0 0">Stores</h2>
+  {{ table(tables.stores, ["store_id", "city", "rentals", "customers", "revenue"], money=["revenue"]) }}
+
+  <h2 style="font-size:17px;margin:0">Top films</h2>
+  {{ table(tables.top_films, ["place", "title", "category", "rentals"]) }}
+
+  <h2 style="font-size:17px;margin:0">Revenue by category</h2>
+  {{ table(tables.categories.head(8), ["category", "payments", "revenue", "share"], money=["revenue"]) }}
+
+  <h2 style="font-size:17px;margin:0">Overdue rentals ({{ tables.overdue | length }} at the end of the day)</h2>
+  {{ table(overdue_top, ["title", "customer", "email", "store_id", "days_overdue"]) }}
+  {% if tables.overdue | length > overdue_top | length %}<p style="color:#57534e;font-size:13px">Showing the {{ overdue_top | length }} most overdue; the full list is attached as CSV.</p>{% endif %}
+
+  <p style="color:#a8a29e;font-size:12px;margin-top:24px">Generated {{ generated }} by reportkit.</p>
+</div>
+</body></html>

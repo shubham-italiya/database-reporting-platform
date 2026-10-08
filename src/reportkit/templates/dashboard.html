@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rental reporting - {{ day }}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#f5f5f4; --card:#fff; --text:#1c1917; --muted:#57534e; --line:#e7e5e4; --accent:#2563eb; --up:#15803d; --down:#b91c1c; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif; }
+  header { background:var(--card); border-bottom:1px solid var(--line); }
+  .wrap { max-width:1120px; margin:0 auto; padding:0 16px; }
+  header .wrap { display:flex; align-items:center; gap:16px; height:58px; }
+  header h1 { font-size:18px; margin:0; } header form { margin-left:auto; }
+  select, input, button { font:inherit; padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); }
+  button { background:var(--accent); color:#fff; border-color:var(--accent); cursor:pointer; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin:20px 0; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .kpi .label { color:var(--muted); font-size:13px; } .kpi .value { font-size:24px; font-weight:700; }
+  .up { color:var(--up); font-size:13px; } .down { color:var(--down); font-size:13px; }
+  .grid { display:grid; grid-template-columns:2fr 1fr; gap:12px; }
+  h2 { font-size:16px; margin:0 0 10px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; color:var(--muted); font-weight:600; border-bottom:2px solid var(--line); padding:6px; }
+  td { border-bottom:1px solid #f0efee; padding:6px; }
+  .pager { display:flex; gap:10px; align-items:center; margin-top:10px; color:var(--muted); }
+  a { color:var(--accent); }
+  .scroll { overflow-x:auto; }
+  .scroll table { min-width:640px; }
+  @media (max-width:760px) { .grid { grid-template-columns:1fr; } header .wrap { height:auto; flex-wrap:wrap; padding:10px 16px; } header form { margin-left:0; } select { max-width:100%; } }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>Rental reporting</h1>
+  <form method="get">
+    <label for="day">Day</label>
+    <select id="day" name="day" onchange="this.form.submit()">
+      {% for d in days %}<option value="{{ d }}" {% if d == day %}selected{% endif %}>{{ d.strftime('%a %d %b %Y') }}</option>{% endfor %}
+    </select>
+  </form>
+  <a href="/reports/{{ day }}">Daily report &rarr;</a>
+</div></header>
+
+<main class="wrap">
+  <section class="kpis">
+    {% for label, key, fmt in [("Rentals", "rentals", "{:,}"), ("Revenue", "revenue", "${:,.2f}"), ("Active customers", "active_customers", "{:,}"), ("Returns", "returns", "{:,}"), ("Revenue per rental", "revenue_per_rental", "${:,.2f}")] %}
+      {% set change = kpis.change_pct.get(key) %}
+      <div class="card kpi"><div class="label">{{ label }}</div><div class="value">{{ fmt.format(kpis[key]) }}</div>
+        {% if change is not none %}<div class="{{ 'up' if change >= 0 else 'down' }}">{{ '&#9650;' | safe if change >= 0 else '&#9660;' | safe }} {{ '%+.1f' | format(change) }}% vs previous {{ kpis.baseline_days }} trading days</div>{% endif %}
+      </div>
+    {% endfor %}
+  </section>
+
+  <section class="grid">
+    <div class="card"><h2>Revenue and rentals, last 30 days</h2><canvas id="trend" height="120" aria-label="Revenue and rentals per day"></canvas></div>
+    <div class="card"><h2>Stores on {{ day.strftime('%d %b') }}</h2>
+      <table><tr><th>Store</th><th>Rentals</th><th>Revenue</th></tr>
+      {% for s in stores %}<tr><td>{{ s.store_id }} &middot; {{ s.city }}</td><td>{{ s.rentals }}</td><td>${{ '{:,.2f}'.format(s.revenue) }}</td></tr>{% endfor %}
+      </table></div>
+  </section>
+
+  <section class="card" style="margin:12px 0 32px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <h2 style="margin:0">Rentals ({{ '{:,}'.format(total) }}{% if search %} matching "{{ search }}"{% endif %})</h2>
+      <form method="get"><input type="hidden" name="day" value="{{ day }}">
+        <input name="q" value="{{ search }}" placeholder="Customer or film title" aria-label="Search rentals">
+        <button type="submit">Search</button></form>
+    </div>
+    <div class="scroll"><table style="margin-top:10px">
+      <tr><th>ID</th><th>Rented</th><th>Returned</th><th>Customer</th><th>Film</th><th>Store</th><th>Paid</th></tr>
+      {% for r in rows %}
+      <tr><td>{{ r.rental_id }}</td><td>{{ (r.rental_date | string)[:16] }}</td>
+          <td>{{ (r.return_date | string)[:16] if r.return_date else 'not returned' }}</td>
+          <td>{{ r.customer | title }}</td><td>{{ r.title | title }}</td><td>{{ r.store_id }}</td>
+          <td>{{ '$%.2f' | format(r.amount) if r.amount is not none else '-' }}</td></tr>
+      {% else %}<tr><td colspan="7">No rentals match.</td></tr>{% endfor %}
+    </table></div>
+    <div class="pager">
+      {% if page > 1 %}<a href="?day={{ day }}&q={{ search | urlencode }}&page={{ page - 1 }}">&larr; Newer</a>{% endif %}
+      <span>Page {{ page }} of {{ pages }}</span>
+      {% if page < pages %}<a href="?day={{ day }}&q={{ search | urlencode }}&page={{ page + 1 }}">Older &rarr;</a>{% endif %}
+    </div>
+  </section>
+</main>
+<script>
+  const t = {{ trend | safe }};
+  new Chart(document.getElementById("trend"), {
+    data: { labels: t.labels, datasets: [
+      { type: "bar", label: "Revenue ($)", data: t.revenue, backgroundColor: "#2563eb", yAxisID: "y" },
+      { type: "line", label: "Rentals", data: t.rentals, borderColor: "#f59e0b", backgroundColor: "#f59e0b", yAxisID: "y1", tension: 0.2 } ] },
+    options: { responsive: true, interaction: { mode: "index", intersect: false },
+      scales: { y: { title: { display: true, text: "Revenue ($)" } },
+                y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "Rentals" } } } }
+  });
+</script>
+</body>
+</html>

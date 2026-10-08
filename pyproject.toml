@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reportkit"
+version = "1.0.0"
+description = "Reporting on a relational database: SQL KPIs, a FastAPI dashboard and automated daily HTML reports."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Shubham S. Italiya" }]
+requires-python = ">=3.10"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "pandas>=2.0",
+    "matplotlib>=3.8",
+    "jinja2>=3.1",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+dev = ["pytest>=8", "ruff>=0.5", "httpx>=0.27"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+reportkit = ["templates/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
